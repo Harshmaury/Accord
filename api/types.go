@@ -1,32 +1,59 @@
-// Package api defines the shared request/response types and error codes
-// for the Nexus HTTP API. Both engxd (server) and herald (client) import
-// this package — it is the compile-time contract between them.
+// Package api defines the compile-time contract between engxd (server)
+// and herald (client). Both import this package — field changes that break
+// compatibility fail at compile time, not silently at runtime.
 //
-// Rule: no business logic lives here. Types and constants only.
-// Rule: no imports from Nexus, Herald, or any platform service.
-// Rule: zero non-stdlib dependencies — accord must be importable by anyone.
+// HARDENING RULES — never violate:
+//   1. Field names and json tags must exactly match engxd handler output.
+//      Verify against internal/api/handler/*.go before any change.
+//   2. Never add required fields to request types — always omitempty.
+//      Breaking change = major version bump (coordinate nexus + herald).
+//   3. Response[T] is the only envelope — never parse raw {"ok":bool} outside this package.
+//   4. ErrorCode is stable — values are API surface. Never rename, only add.
+//   5. Version must match internal/api/server.go X-Nexus-API-Version header value.
+//
+// Verified against: nexus internal/api/handler/*.go, internal/state/db.go
+// Last verified: 2026-03-20
 package api
 
 // ── API VERSION ───────────────────────────────────────────────────────────────
 
 // Version is the current Nexus HTTP API version.
-// Sent by engxd as X-Nexus-API-Version response header.
-// Checked by herald on every response.
+// MUST match the value returned by engxd in X-Nexus-API-Version header.
+// Increment when any response field is renamed or removed (major change).
 const Version = "1"
 
-// VersionHeader is the HTTP header name carrying the API version.
+// VersionHeader is the HTTP response header name carrying the API version.
 const VersionHeader = "X-Nexus-API-Version"
 
 // ── ENVELOPE ─────────────────────────────────────────────────────────────────
 
 // Response is the standard JSON envelope for all Nexus API responses.
+// Shape verified against internal/api/handler/respond.go:
+//   {"ok": bool, "data": T, "error": "string"}
 type Response[T any] struct {
 	OK    bool   `json:"ok"`
 	Data  T      `json:"data,omitempty"`
-	Error *Error `json:"error,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
-// Error is the structured error payload returned when ok=false.
+// ── ERROR CODES ───────────────────────────────────────────────────────────────
+
+// ErrorCode is a stable machine-readable error identifier.
+// Switch on Code — NEVER on Message (messages are human-readable and may change).
+// All codes are permanent API surface — never rename or remove.
+type ErrorCode string
+
+const (
+	ErrNotFound          ErrorCode = "NOT_FOUND"          // 404 — resource does not exist
+	ErrAlreadyExists     ErrorCode = "ALREADY_EXISTS"      // 409 — resource already registered
+	ErrInvalidInput      ErrorCode = "INVALID_INPUT"       // 400 — malformed request body or params
+	ErrUnauthorized      ErrorCode = "UNAUTHORIZED"        // 401 — missing or invalid X-Service-Token
+	ErrDaemonUnavailable ErrorCode = "DAEMON_UNAVAILABLE"  // transport — cannot reach engxd
+	ErrVersionMismatch   ErrorCode = "VERSION_MISMATCH"    // X-Nexus-API-Version mismatch
+	ErrInternal          ErrorCode = "INTERNAL"            // 500 — unexpected server error
+)
+
+// Error is a structured API error. Implements the error interface.
 type Error struct {
 	Code    ErrorCode `json:"code"`
 	Message string    `json:"message"`
@@ -34,116 +61,100 @@ type Error struct {
 
 func (e *Error) Error() string {
 	if e == nil {
-		return ""
+		return "<nil>"
 	}
 	return string(e.Code) + ": " + e.Message
 }
 
-// ── ERROR CODES ───────────────────────────────────────────────────────────────
-
-// ErrorCode is a stable machine-readable identifier for API errors.
-// Callers switch on Code — never on Message (messages may change).
-type ErrorCode string
-
-const (
-	// ErrNotFound is returned when a resource does not exist.
-	ErrNotFound ErrorCode = "NOT_FOUND"
-
-	// ErrAlreadyExists is returned when creating a resource that already exists.
-	ErrAlreadyExists ErrorCode = "ALREADY_EXISTS"
-
-	// ErrInvalidInput is returned when the request body or params are malformed.
-	ErrInvalidInput ErrorCode = "INVALID_INPUT"
-
-	// ErrUnauthorized is returned when X-Service-Token is missing or invalid.
-	ErrUnauthorized ErrorCode = "UNAUTHORIZED"
-
-	// ErrDaemonUnavailable is returned when engxd cannot be reached.
-	ErrDaemonUnavailable ErrorCode = "DAEMON_UNAVAILABLE"
-
-	// ErrVersionMismatch is returned when client and server API versions differ.
-	ErrVersionMismatch ErrorCode = "VERSION_MISMATCH"
-
-	// ErrInternal is returned for unexpected server-side errors.
-	ErrInternal ErrorCode = "INTERNAL"
-)
-
 // ── SERVICE TYPES ─────────────────────────────────────────────────────────────
+// Verified against: internal/state/db.go Service struct + GET /services handler output.
 
 // ServiceDTO is the API representation of a managed service.
+// Field names match state.Service json tags exactly.
 type ServiceDTO struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Project string `json:"project"`
-	Desired string `json:"desired"`
-	Actual  string `json:"actual"`
-	Config  string `json:"config"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Project      string `json:"project"`
+	DesiredState string `json:"desired_state"`  // matches state.Service.DesiredState
+	ActualState  string `json:"actual_state"`   // matches state.Service.ActualState
+	Provider     string `json:"provider"`
+	Config       string `json:"config"`
+	FailCount    int    `json:"fail_count"`
 }
 
-// ServiceListResponse is the response body for GET /services.
-type ServiceListResponse = Response[[]ServiceDTO]
-
-// ServiceRegisterRequest is the request body for POST /services/register.
+// ServiceRegisterRequest is the body for POST /services/register.
+// Verified against internal/api/handler/services_register.go registerServiceRequest.
 type ServiceRegisterRequest struct {
 	ID       string `json:"id"`
-	Name     string `json:"name,omitempty"`
+	Name     string `json:"name,omitempty"`   // optional — defaults to ID if empty
 	Project  string `json:"project"`
-	Provider string `json:"provider"`
-	Config   string `json:"config"`
+	Provider string `json:"provider"`         // "process" | "docker" | "k8s"
+	Config   string `json:"config"`           // JSON-encoded provider config
 }
 
-// ServiceRegisterResponse is the response body for POST /services/register.
-type ServiceRegisterResponse = Response[ServiceIdentity]
+// ServiceRegisterResponse is the body for POST /services/register.
+// Verified against handler: respondOK(w, map[string]string{"id": req.ID, "name": req.Name})
+type ServiceRegisterResponse struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
 
-// ServiceResetResponse is the response body for POST /services/{id}/reset.
-type ServiceResetResponse = Response[ServiceResetData]
-
-// ServiceResetData carries the result of a service reset.
-type ServiceResetData struct {
+// ServiceResetResponse is the body for POST /services/{id}/reset.
+// Verified against handler: respondOK(w, map[string]any{"id": id, "reset": true})
+type ServiceResetResponse struct {
 	ID    string `json:"id"`
 	Reset bool   `json:"reset"`
 }
 
 // ── PROJECT TYPES ─────────────────────────────────────────────────────────────
+// Verified against: internal/state/db.go Project struct
+//                   internal/controllers/project_controller.go ProjectStatus
 
 // ProjectDTO is the API representation of a registered project.
+// Note: GET /projects returns []controllers.ProjectStatus, not []state.Project.
+// This DTO matches the ProjectStatus shape from controllers.
 type ProjectDTO struct {
 	ID       string       `json:"id"`
 	Name     string       `json:"name"`
 	Services []ServiceDTO `json:"services"`
-	Status   string       `json:"status"`
 }
 
-// ProjectListResponse is the response body for GET /projects.
-type ProjectListResponse = Response[[]ProjectDTO]
-
-// ProjectStartResponse is the response body for POST /projects/{id}/start.
-type ProjectStartResponse = Response[ProjectActionData]
-
-// ProjectStopResponse is the response body for POST /projects/{id}/stop.
-type ProjectStopResponse = Response[ProjectActionData]
-
-// ProjectActionData carries the result of a project lifecycle action.
-type ProjectActionData struct {
+// ProjectActionResponse is the body for POST /projects/{id}/start and /stop.
+// Verified against internal/api/handler/projects.go Start/Stop handlers.
+type ProjectActionResponse struct {
 	ProjectID string `json:"project_id"`
 	Queued    int    `json:"queued"`
 	Message   string `json:"message,omitempty"`
 }
 
-// ── AGENT TYPES ───────────────────────────────────────────────────────────────
-
-// AgentDTO is the API representation of a registered remote agent.
-type AgentDTO struct {
-	ID       string `json:"id"`
-	Addr     string `json:"addr"`
-	Online   bool   `json:"online"`
-	LastSeen string `json:"last_seen"`
+// ProjectRegisterRequest is the body for POST /projects/register.
+// Verified against internal/api/handler/projects.go Register handler.
+type ProjectRegisterRequest struct {
+	ID          string `json:"id"`
+	Name        string `json:"name,omitempty"`
+	Path        string `json:"path"`
+	Language    string `json:"language,omitempty"`
+	ProjectType string `json:"project_type,omitempty"`
 }
 
-// AgentListResponse is the response body for GET /agents.
-type AgentListResponse = Response[[]AgentDTO]
+// ── AGENT TYPES ───────────────────────────────────────────────────────────────
+// Verified against: internal/state/db_agents.go Agent struct
+//                   internal/api/handler/agents.go
+
+// AgentDTO is the API representation of a registered remote agent.
+// Token field is intentionally omitted — never returned by the API.
+type AgentDTO struct {
+	ID           string `json:"id"`
+	Hostname     string `json:"hostname"`
+	Address      string `json:"address"`
+	Online       bool   `json:"online"`       // derived: last_seen within 30s
+	LastSeen     string `json:"last_seen"`    // RFC3339 string from handler
+	RegisteredAt string `json:"registered_at"`
+}
 
 // ── EVENT TYPES ───────────────────────────────────────────────────────────────
+// Verified against: internal/state/db.go Event struct
+//                   internal/api/handler/events.go
 
 // EventDTO is the API representation of a platform event.
 type EventDTO struct {
@@ -155,29 +166,38 @@ type EventDTO struct {
 	Component string `json:"component"`
 	Outcome   string `json:"outcome"`
 	Payload   string `json:"payload,omitempty"`
-	CreatedAt string `json:"created_at"`
+	CreatedAt string `json:"created_at"` // RFC3339
 }
 
-// EventListResponse is the response body for GET /events.
-type EventListResponse = Response[[]EventDTO]
-
 // ── HEALTH TYPES ──────────────────────────────────────────────────────────────
+// Verified against: internal/api/server.go makeHealthHandler
 
-// HealthResponse is the response body for GET /health.
-type HealthResponse = Response[HealthData]
-
-// HealthData carries daemon health information.
+// HealthData is the response body for GET /health.
 type HealthData struct {
 	Status        string  `json:"status"`
 	UptimeSeconds float64 `json:"uptime_seconds"`
 	DaemonVersion string  `json:"daemon_version"`
-	ServicesTotal int     `json:"services_total"`
 }
 
-// ── SHARED ────────────────────────────────────────────────────────────────────
+// ── INVARIANT CHECKS ─────────────────────────────────────────────────────────
+// These constants document the API surface explicitly.
+// If engxd handler output changes, these must be updated here AND
+// a version bump must be coordinated across nexus + herald + accord.
 
-// ServiceIdentity is a minimal service identifier returned by create operations.
-type ServiceIdentity struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
+const (
+	// ProviderProcess is the process runtime provider identifier.
+	ProviderProcess = "process"
+	// ProviderDocker is the Docker runtime provider identifier.
+	ProviderDocker = "docker"
+	// ProviderK8s is the Kubernetes runtime provider identifier.
+	ProviderK8s = "k8s"
+
+	// StateRunning is the running service state string.
+	StateRunning = "running"
+	// StateStopped is the stopped service state string.
+	StateStopped = "stopped"
+	// StateMaintenance is the maintenance service state string.
+	StateMaintenance = "maintenance"
+	// StateCrashed is the crashed service state string.
+	StateCrashed = "crashed"
+)
