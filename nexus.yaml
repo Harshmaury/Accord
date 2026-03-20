@@ -1,0 +1,10 @@
+name: accord
+id: accord
+type: library
+language: go
+version: 0.1.0
+capabilities:
+  - api-types
+  - error-codes
+  - api-versioning
+depends_on: []
