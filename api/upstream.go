@@ -155,3 +155,56 @@ type NexusMetricsDTO struct {
 	ServicesRunning       int64   `json:"services_running"`
 	ServicesInMaintenance int64   `json:"services_in_maintenance"`
 }
+
+// ── GATE TYPES ────────────────────────────────────────────────────────────────
+// ADR-042: Gate identity authority types.
+// Verified against gate/internal/identity/token.go claim structure.
+
+// IdentityClaimDTO is the validated actor identity returned by Gate POST /gate/validate.
+// Embedded in execution records and event attribution.
+// sub format: "<github_login>" for developers, "agent:<agent-id>" for agents.
+type IdentityClaimDTO struct {
+	Subject   string   `json:"sub"`
+	Scopes    []string `json:"scp"`
+	ExpiresAt int64    `json:"exp"`
+	TokenID   string   `json:"jti"`
+}
+
+// HasScope returns true if the claim includes the given scope.
+// Import canon.ScopeExecute etc. — never pass raw scope strings.
+func (c *IdentityClaimDTO) HasScope(scope string) bool {
+	for _, s := range c.Scopes {
+		if s == scope {
+			return true
+		}
+	}
+	return false
+}
+
+// GateValidateRequest is the body for POST /gate/validate.
+type GateValidateRequest struct {
+	Token string `json:"token"`
+}
+
+// GateValidateResponse is the response body for POST /gate/validate.
+// Valid=false carries a human-readable Reason — do not switch on Reason string.
+type GateValidateResponse struct {
+	Valid  bool              `json:"valid"`
+	Claim  *IdentityClaimDTO `json:"claim,omitempty"`
+	Reason string            `json:"reason,omitempty"`
+}
+
+// GatePublicKeyDTO is the response body for GET /gate/public-key.
+// Key is a base64-encoded DER-encoded Ed25519 public key.
+// Alg is always "Ed25519" — reject tokens if this value is unexpected.
+type GatePublicKeyDTO struct {
+	Key string `json:"key"`
+	Alg string `json:"alg"`
+}
+
+// GateTokenResponse is returned by POST /gate/tokens/* and the OAuth callback.
+type GateTokenResponse struct {
+	Token     string `json:"token"`
+	Subject   string `json:"sub"`
+	ExpiresAt int64  `json:"exp"`
+}

@@ -12,7 +12,8 @@
 //   5. Version must match internal/api/server.go X-Nexus-API-Version header value.
 //
 // Verified against: nexus internal/api/handler/*.go, internal/state/db.go
-// Last verified: 2026-03-20
+// Last verified: 2026-03-21
+// ADR-042: ErrForbidden added. Gate DTOs in upstream.go.
 package api
 
 // ── API VERSION ───────────────────────────────────────────────────────────────
@@ -48,6 +49,7 @@ const (
 	ErrAlreadyExists     ErrorCode = "ALREADY_EXISTS"      // 409 — resource already registered
 	ErrInvalidInput      ErrorCode = "INVALID_INPUT"       // 400 — malformed request body or params
 	ErrUnauthorized      ErrorCode = "UNAUTHORIZED"        // 401 — missing or invalid X-Service-Token
+	ErrForbidden         ErrorCode = "FORBIDDEN"           // 403 — valid identity, insufficient scope (ADR-042)
 	ErrDaemonUnavailable ErrorCode = "DAEMON_UNAVAILABLE"  // transport — cannot reach engxd
 	ErrVersionMismatch   ErrorCode = "VERSION_MISMATCH"    // X-Nexus-API-Version mismatch
 	ErrInternal          ErrorCode = "INTERNAL"            // 500 — unexpected server error
