@@ -14,6 +14,7 @@
 //   Nexus   internal/telemetry/metrics.go       Snapshot shape
 //
 // Last verified: 2026-03-21
+// ADR-043: PlanSpanDTO added.
 package api
 
 import "time"
@@ -207,4 +208,22 @@ type GateTokenResponse struct {
 	Token     string `json:"token"`
 	Subject   string `json:"sub"`
 	ExpiresAt int64  `json:"exp"`
+}
+
+// ── PLAN SPAN TYPES ───────────────────────────────────────────────────────────
+// ADR-043: plan execution model — span emitted per step by the engx CLI executor.
+// Carried in EventDTO.Payload as JSON. Component is always "engx".
+// Type is always "PLAN_STEP". Outcome is "success" | "failure" | "skipped".
+
+// PlanSpanDTO is one step span emitted by the engx CLI plan executor.
+// Observer and Sentinel consume this via GET /events filtering on component="engx".
+type PlanSpanDTO struct {
+	PlanID     string `json:"plan_id"`
+	PlanName   string `json:"plan_name"`
+	StepIndex  int    `json:"step_index"`
+	StepLabel  string `json:"step_label"`
+	StepKind   string `json:"step_kind"`   // "validate" | "execute" | "wait" | "observe"
+	DurationMS int64  `json:"duration_ms"`
+	Outcome    string `json:"outcome"`     // "success" | "failure" | "skipped"
+	Detail     string `json:"detail,omitempty"`
 }
