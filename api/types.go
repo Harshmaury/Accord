@@ -155,18 +155,22 @@ type AgentDTO struct {
 // ── EVENT TYPES ───────────────────────────────────────────────────────────────
 // Verified against: internal/state/db.go Event struct
 //                   internal/api/handler/events.go
+// ADR-037: SpanID, ParentSpanID, Level added (omitempty — backward compatible)
 
 // EventDTO is the API representation of a platform event.
 type EventDTO struct {
-	ID        int64  `json:"id"`
-	ServiceID string `json:"service_id"`
-	Type      string `json:"type"`
-	Source    string `json:"source"`
-	TraceID   string `json:"trace_id"`
-	Component string `json:"component"`
-	Outcome   string `json:"outcome"`
-	Payload   string `json:"payload,omitempty"`
-	CreatedAt string `json:"created_at"` // RFC3339
+	ID           int64  `json:"id"`
+	ServiceID    string `json:"service_id"`
+	Type         string `json:"type"`
+	Source       string `json:"source"`
+	TraceID      string `json:"trace_id"`
+	SpanID       string `json:"span_id,omitempty"`        // ADR-037
+	ParentSpanID string `json:"parent_span_id,omitempty"` // ADR-037
+	Level        string `json:"level,omitempty"`           // ADR-037: info|warn|error
+	Component    string `json:"component"`
+	Outcome      string `json:"outcome"`
+	Payload      string `json:"payload,omitempty"`
+	CreatedAt    string `json:"created_at"` // RFC3339
 }
 
 // ── HEALTH TYPES ──────────────────────────────────────────────────────────────
