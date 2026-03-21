@@ -1,5 +1,7 @@
 // @accord-project: Accord
 // @accord-path: api/upstream.go
+// Navigator types added: NavigatorNodeDTO, NavigatorEdgeDTO, NavigatorSummaryDTO,
+// NavigatorGraphDTO — verified against navigator/internal/topology/model.go json tags.
 // Upstream DTOs for Atlas, Forge, Guardian, and Nexus /metrics.
 // These types are the compile-time contract between Herald clients and
 // the services they call. Verified against each service's handler output.
@@ -93,6 +95,49 @@ type GuardianReportDTO struct {
 	Findings    []GuardianFindingDTO `json:"findings"`
 	Summary     GuardianSummaryDTO   `json:"summary"`
 	EvaluatedAt time.Time            `json:"evaluated_at"`
+}
+
+// ── NAVIGATOR TYPES ───────────────────────────────────────────────────────────
+
+// NavigatorNodeDTO is one project node from Navigator GET /topology/graph.
+// Matches navigator/internal/topology/model.go Node json tags exactly.
+type NavigatorNodeDTO struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Type         string   `json:"type"`
+	Language     string   `json:"language"`
+	Status       string   `json:"status"` // "verified" | "unverified"
+	Capabilities []string `json:"capabilities"`
+	DependsOn    []string `json:"depends_on"`
+	Source       string   `json:"source"`
+	Path         string   `json:"path"`
+}
+
+// NavigatorEdgeDTO is one directed edge from Navigator GET /topology/graph.
+// Matches navigator/internal/topology/model.go Edge json tags exactly.
+// Note: Navigator uses json:"type" for EdgeType (not "edge_type" as in AtlasEdgeDTO).
+type NavigatorEdgeDTO struct {
+	From     string `json:"from"`
+	To       string `json:"to"`
+	EdgeType string `json:"type"`
+	Source   string `json:"source"`
+}
+
+// NavigatorSummaryDTO is the count summary embedded in the topology graph response.
+type NavigatorSummaryDTO struct {
+	TotalProjects   int `json:"total_projects"`
+	VerifiedCount   int `json:"verified_count"`
+	UnverifiedCount int `json:"unverified_count"`
+	TotalEdges      int `json:"total_edges"`
+}
+
+// NavigatorGraphDTO is the full response body of Navigator GET /topology/graph.
+// Matches navigator/internal/topology/model.go Graph json tags exactly.
+type NavigatorGraphDTO struct {
+	CollectedAt string               `json:"collected_at"` // RFC3339
+	Nodes       []NavigatorNodeDTO   `json:"nodes"`
+	Edges       []NavigatorEdgeDTO   `json:"edges"`
+	Summary     NavigatorSummaryDTO  `json:"summary"`
 }
 
 // ── NEXUS METRICS TYPES ───────────────────────────────────────────────────────
