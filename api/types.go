@@ -201,3 +201,22 @@ const (
 	// StateCrashed is the crashed service state string.
 	StateCrashed = "crashed"
 )
+
+// ServiceResetData carries the result of a service reset.
+type ServiceResetData struct {
+	ID    string `json:"id"`
+	Reset bool   `json:"reset"`
+}
+
+// ServiceIdentity is a minimal service identifier returned by create operations.
+type ServiceIdentity struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ProjectActionData carries the result of a project lifecycle action.
+type ProjectActionData struct {
+	ProjectID string `json:"project_id"`
+	Queued    int    `json:"queued"`
+	Message   string `json:"message,omitempty"`
+}
