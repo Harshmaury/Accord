@@ -172,6 +172,7 @@ type EventDTO struct {
 	Component    string `json:"component"`
 	Outcome      string `json:"outcome"`
 	Payload      string `json:"payload,omitempty"`
+	Actor        string `json:"actor,omitempty"`         // ADR-042: Gate subject — empty for system events
 	CreatedAt    string `json:"created_at"` // RFC3339
 }
 

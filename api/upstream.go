@@ -64,9 +64,11 @@ type ForgeExecutionDTO struct {
 	Status     string    `json:"status"`
 	Output     string    `json:"output,omitempty"`
 	Error      string    `json:"error,omitempty"`
-	DurationMS int64     `json:"duration_ms"`
-	StartedAt  time.Time `json:"started_at"`
-	FinishedAt time.Time `json:"finished_at"`
+	DurationMS  int64     `json:"duration_ms"`
+	StartedAt   time.Time `json:"started_at"`
+	FinishedAt  time.Time `json:"finished_at"`
+	ActorSub    string    `json:"actor_sub,omitempty"`    // ADR-042: Gate subject
+	ActorScope  []string  `json:"actor_scope,omitempty"`  // ADR-042: scopes at execution time
 }
 
 // ── GUARDIAN TYPES ────────────────────────────────────────────────────────────
