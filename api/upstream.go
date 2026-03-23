@@ -219,13 +219,23 @@ type GateTokenResponse struct {
 
 // PlanSpanDTO is one step span emitted by the engx CLI plan executor.
 // Observer and Sentinel consume this via GET /events filtering on component="engx".
+//
+// SchemaVersion discriminates between schema evolutions. Consumers must switch
+// on SchemaVersion before deserializing other fields. Current version: "1".
+// Bump to "2" on any breaking field change; bump minor comment only for additive changes.
 type PlanSpanDTO struct {
-	PlanID     string `json:"plan_id"`
-	PlanName   string `json:"plan_name"`
-	StepIndex  int    `json:"step_index"`
-	StepLabel  string `json:"step_label"`
-	StepKind   string `json:"step_kind"`   // "validate" | "execute" | "wait" | "observe"
-	DurationMS int64  `json:"duration_ms"`
-	Outcome    string `json:"outcome"`     // "success" | "failure" | "skipped"
-	Detail     string `json:"detail,omitempty"`
+	SchemaVersion string `json:"schema_version"` // always "1" — bump on breaking change
+	PlanID        string `json:"plan_id"`
+	PlanName      string `json:"plan_name"`
+	StepIndex     int    `json:"step_index"`
+	StepLabel     string `json:"step_label"`
+	StepKind      string `json:"step_kind"`   // "validate" | "execute" | "wait" | "observe"
+	DurationMS    int64  `json:"duration_ms"`
+	Outcome       string `json:"outcome"`     // "success" | "failure" | "skipped"
+	Detail        string `json:"detail,omitempty"`
 }
+
+// PlanSpanSchemaV1 is the current PlanSpanDTO schema version constant.
+// Set PlanSpanDTO.SchemaVersion = PlanSpanSchemaV1 on every emission.
+// Consumers: if SchemaVersion != PlanSpanSchemaV1, skip or log+skip the span.
+const PlanSpanSchemaV1 = "1"
